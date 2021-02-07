@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+import pysam, os
+
+def alignment_file(filename):
+    rwflag = 'rb' if filename[-4:].lower()=='.bam' else 'r'
+    return pysam.AlignmentFile(filename, rwflag)
+
+def parse_precluster_file(preclust_file):
+    rval = {}
+    for line in preclust_file:
+        longread,cluster = line.rstrip('\n').split(',')
+        if longread!='orphan':
+            rval[longread] = cluster
+    return rval
+
+def parse_cluster_file(clust_file):
+    rval={}
+    for line in clust_file:
+        cluster,_,members_str = line.rstrip('\n').split('\t', maxsplit=2)
+        for member in members_str.split(','):
+            rval[member] = cluster
+    return rval
+
+def parse_cdhit_file(cdhit_file):
+    rval={}
+    for line in cdhit_file:
+        if line[0] == '>':
+            cluster = line[9:-1]
+        else:
+            member = line.split()[2][1:-3]
+            rval[member] = cluster
+    return rval
+
+def parse_tsv_file(tsv_file):
+    rval={}
+    for line in tsv_file:
+        cluster, member = line.rstrip('\n').split(maxsplit=1)
+        rval[member] = cluster
+    return rval
+
+def clustering_helper(alignments, cluster_dict = None):
+    left_clusters, right_clusters = set(), set()
+    left_read, right_read = None, None
+    for alignment in alignments:
+        if not left_read and alignment.is_read1 and alignment.query_sequence:
+            left_read = (
+                alignment.query_name,
+                alignment.query_sequence,
+                pysam.qualities_to_qualitystring(
+                    alignment.query_qualities
+                )
+            )
+        elif not right_read and alignment.is_read2 and alignment.query_sequence:
+            right_read = (
+                alignment.query_name,
+                alignment.query_sequence,
+                pysam.qualities_to_qualitystring(
+                    alignment.query_qualities
+                )
+            )
+        if alignment.is_unmapped:
+            continue
+        try:
+            if cluster_dict:
+                cluster_id = cluster_dict[alignment.reference_name]
+            else:
+                cluster_id = alignment.reference_name.replace('/','_')
+        except KeyError:
+            continue
+        if alignment.is_read1:
+            left_clusters.add(cluster_id)
+            if alignment.mate_is_unmapped:
+                right_clusters.add(cluster_id)
+        elif alignment.is_read2:
+            right_clusters.add(cluster_id)
+            if alignment.mate_is_unmapped:
+                left_clusters.add(cluster_id)
+    clusters = left_clusters.union(right_clusters)
+    return clusters, left_read, right_read
+
+def cluster_sr(cluster_dict, alignments, output='cluster'):
+    clusters, left, right = clustering_helper(alignments, cluster_dict)
+    if len(clusters) == 0:
+        clusters.add('unmapped')
+        #print("WARNING! Unmapped read {}!".format(left.name))
+    if not (left and right):
+        os.makedirs('{}'.format(output), exist_ok=True)
+        with open('{}/err.log'.format(output), 'a') as errlog:
+            errlog.write("WARNING! Missing sequence for {}! Intended for clusters {}!\n".format(alignments[0].query_name, clusters))
+    else:
+        for c in clusters:
+            os.makedirs('{}/{}'.format(output, c), exist_ok=True)
+            with open('{}/{}/1.fq'.format(output, c), 'a') as fq_file:
+                fq_file.write('@{}\n{}\n+\n{}\n'.format(*left))
+            with open('{}/{}/2.fq'.format(output, c), 'a') as fq_file:
+                fq_file.write('@{}\n{}\n+\n{}\n'.format(*right))
+
+def cluster_srs(cluster_dict, alignments, output='cluster'):
+    current_read_name = None
+    relevant_alignments = [] #use some more intelligent datastructure?
+    for alignment in alignments:
+        if current_read_name != alignment.query_name:
+            if current_read_name != None:
+                cluster_sr(cluster_dict, relevant_alignments, output)
+            relevant_alignments = [alignment]
+            current_read_name = alignment.query_name
+        else:
+            relevant_alignments.append(alignment)
+    
+def main():
+    import argparse
+    from argparse import ArgumentParser
+
+    # clusterer cluster.csv alignment.bam
+
+    parser = ArgumentParser("A program to cluster a set of short reads given an alignment short reads to long reads and a clustering of the corresponding long reads.")
+    parser.add_argument('cluster_file', help="The file describing the clusters")
+    parser.add_argument('alignment_file', help="The alignment file in SAM or BAM")
+    parser.add_argument('-o',"--output", help="Name of the output directory", default='cluster')
+    parser.add_argument('-c','--cluster-format',help="The format of the cluster-file",choices=['pre','cog','tsv','cdh'], default='tsv')
+    
+    args = parser.parse_args()
+    os.makedirs(args.output, exist_ok=True)
+    with open(args.cluster_file, 'r') as cluster_file:
+        if args.cluster_format=='cdh':
+            cluster_dict = parse_cdhit_file(cluster_file)
+        elif args.cluster_format=='pre':
+            cluster_dict = parse_precluster_file(cluster_file)
+        elif args.cluster_format=='cog':
+            cluster_dict = parse_cluster_file(cluster_file)
+        elif args.cluster_format=='tsv':
+            cluster_dict = parse_tsv_file(cluster_file)
+    with alignment_file(args.alignment_file) as af:
+        cluster_srs(cluster_dict, af, args.output)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+import pysam, os
+
+def parse_tsv_file(tsv_file):
+    rval={}
+    for line in tsv_file:
+        cluster, member = line.rstrip('\n').split(maxsplit=1)
+        rval.setdefault(member,[]).append(cluster)
+    return rval
+
+def get_if_mapped(a, b):
+    try:
+        return a[b]
+    except KeyError:
+        return ['unmapped']
+
+def cluster_srs(cluster_dict, fx_1, fx_2, output='cluster'):
+    fx_out_1, fx_out_2 = {},{}
+    for r_1 in fx_1:
+        r_2 = next(fx_2)
+        if r_1.name != r_2.name:
+            #allow for read names on the form X/1 and X/2:
+            if r_1.name[:-2] != r_2.name[:-2]:
+                raise ValueError("ERROR! {} AND {} ARE NOT SAME NAME!".format(r_1.name,r_2.name))
+        for nr in get_if_mapped(cluster_dict, r_1.name):
+            fx_out_1.setdefault(nr,[]).append(r_1)
+            fx_out_2.setdefault(nr,[]).append(r_2)
+    for nr in fx_out_1.keys():
+        os.makedirs('{}/{}'.format(output, nr), exist_ok=True)
+        with open('{}/{}/1.fq'.format(output, nr), 'w') as fq_file:
+            for left in fx_out_1[nr]:
+                print(left, file=fq_file)
+        with open('{}/{}/2.fq'.format(output, nr), 'w') as fq_file:
+            for right in fx_out_2[nr]:
+                print(right, file=fq_file)
+
+def main():
+    import argparse
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser("A program to cluster a set of short PE reads given a clustering file.")
+    parser.add_argument('cluster_file', help="The file describing the clusters")
+    parser.add_argument('left_file', help="The left FASTX file")
+    parser.add_argument('right_file', help="The right FASTX file")
+    parser.add_argument('-o',"--output", help="Name of the output directory", default='cluster')
+
+    cluster_dict = {}
+    args = parser.parse_args()
+    os.makedirs(args.output, exist_ok=True)
+    with open(args.cluster_file, 'r') as cluster_file:
+        cluster_dict = parse_tsv_file(cluster_file)
+    with pysam.FastxFile(args.left_file) as fx_1:
+        with pysam.FastxFile(args.right_file) as fx_2:
+            cluster_srs(cluster_dict, fx_1, fx_2, args.output)
+
+if __name__ == "__main__":
+    main()

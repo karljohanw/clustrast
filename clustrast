@@ -1,0 +1,251 @@
+#!/bin/bash
+
+CPU=1
+SECAL='yes'
+SRCLUST_CMD='srClust2'
+
+help_text() {
+    echo "usage: $1 -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--no-secondary-alignments] [--old-style-sr-clustering]"
+    echo "       $1 -h  #to show this help"
+    echo "       $1 -d  #to check dependencies and quit"
+}
+
+THIS_CMD=${0}
+
+cd `dirname ${BASH_SOURCE[0]}`
+
+while (( "$#" )); do
+    if [ ${1:0:1} == '-' ]; then
+	if [ ${1:1:2} == '1' ]; then
+	    INPUT_FASTX_1=${2}
+	elif [ ${1:1:2} == '2' ]; then
+	    INPUT_FASTX_2=${2}
+	elif [ ${1:1:2} == 'g' ]; then
+	    GUIDING_CONTIGS=${2}
+	elif [ ${1:1:2} == 'b' ]; then
+	    BASE_ASSEMBLY=${2}
+	elif [ ${1:1:2} == 'c' ]; then
+	    CLUSTER_FILE=${2}
+	elif [ ${1:1:2} == 'o' ]; then
+	    OUTPUT_DIR=${2}
+	elif [ ${1:1:2} == 't' ]; then
+	    TMP_DIR=${2}
+	elif [ ${1:1:2} == 'p' ]; then
+	    CPU=${2}
+	elif [ ${1:1:2} == 'u' ]; then
+	    UNIQ=t
+	elif [ ${1:1:2} == 'd' ]; then
+	    DEP_CHECK=t
+	elif [ ${1:1:2} == 'h' ]; then
+	    help_text "${THIS_CMD}"
+	    exit 0
+	elif [ ${1:1:1} == '-' ]; then
+	    if [ ${1:2:6} == 'no-sec' ]; then
+		SECAL='no'
+	    elif [ ${1:2:9} == 'old-style' ]; then
+		OLD_STYLE=t
+		SRCLUST_CMD='srClust'
+	    elif [ ${1:2:3} == 'u' ]; then
+		UNIQ=t
+	    fi
+	fi
+    fi
+    shift
+done
+
+[ -z ${BASE_ASSEMBLY+x} ] && DO_BASE=transabyss
+[ -z ${CLUSTER_FILE} ] && DO_CLUST=isONclust
+
+if [ -z ${INPUT_FASTX_1+x} ] || [ -z ${INPUT_FASTX_2+x} ] || [ -z ${OUTPUT_DIR+x} ]; then
+    help_text "${THIS_CMD}"
+    MUST_EXIT=t
+elif ! [ -z ${INPUT_FASTX_1+x} ] && [ -z ${INPUT_FASTX_1: -3} == '.gz' ]; then
+    DO_ZCAT='zcat'
+elif ! [ -z ${GUIDING_CONTIGS+x} ] && [ -z ${GUIDING_CONTIGS: -3} == '.gz' ]; then
+    DO_ZCAT='zcat'
+fi
+
+# The helping-command srClust(2)? needs to exist in the same
+# directory as clustrast, OR be available through $PATH.
+if [ -x ${SRCLUST_CMD} ]; then
+    SRCLUST_CMD="./${SRCLUST_CMD}"
+else
+    DO_SRCLUST=${SRCLUST_CMD}
+fi
+
+DEPS="awk sed sort join ${DO_BASE} minimap2 ${DO_CLUST} ${DO_SRCLUST} ${DO_ZCAT} python3 shannon_cpp"
+for command in ${DEPS}; do
+    if ! type -P ${command} &> /dev/null; then
+	MISSING="${MISSING} ${command}"
+    fi
+done
+if ! [ -z ${MISSING+x} ]; then
+    echo "DEPENDECY ERROR: The following dependencies of ClusTrAsT cannot be found in \$PATH:"
+    echo "DEPENDECY ERROR:${MISSING}"
+    MUST_EXIT=t
+fi
+
+if ! [ -z ${DEP_CHECK+x} ]; then
+    if [ -z ${MUST_EXIT+x} ]; then
+	echo "All dependencies installed!"
+    fi
+    exit 0
+fi
+
+if [ ! -z ${OUTPUT_DIR+x} ] && ! mkdir -p ${OUTPUT_DIR}; then
+    echo "ARGUMENT ERROR: Could not create given output directory!"
+    MUST_EXIT=t
+fi
+
+if [ ! -f ${INPUT_FASTX_1} ] || [ ! -f ${INPUT_FASTX_2} ]; then
+    echo "ARGUMENT ERROR: At least one of the paired-ended input files does not appear to exist!"
+    MUST_EXIT=t
+fi
+
+if ! [ -z ${MUST_EXIT+x} ];then
+    #echo "Will exit ClusTrAsT."
+    exit 1
+fi
+
+if [ -z ${TMP_DIR+x} ]; then
+    TMP_DIR=${OUTPUT_DIR}
+fi
+
+mkdir -p ${TMP_DIR}
+
+if [ -z ${BASE_ASSEMBLY+x} ]; then
+    # Run TransABySS!
+    echo "No base assembly given! Will generate one by TransABySS."
+    KMERS="25 32 39 46 53"
+    for K in ${KMERS}; do
+	transabyss -k ${K} --pe ${INPUT_FASTX_1} ${INPUT_FASTX_2} --cleanup 3 --threads ${CPU} --outdir ${TMP_DIR}/ab/${K} --stage dbg || test -f ${OUTPUT_DIR}/transabyss.DBG.COMPLETE &
+    done
+    wait
+    for K in ${KMERS}; do
+	transabyss -k ${K} --pe ${INPUT_FASTX_1} ${INPUT_FASTX_2} --cleanup 3 --threads ${CPU} --outdir ${TMP_DIR}/ab/${K}
+    done
+    transabyss-merge --mink 25 --maxk 53 ${TMP_DIR}/ab/*/transabyss-final.fa --threads ${CPU} --abyssmap --out ${TMP_DIR}/base-assembly.fa
+    rm -rf ${TMP_DIR}/ab
+    BASE_ASSEMBLY=${TMP_DIR}/base-assembly.fa
+fi
+
+if [ -z ${CLUSTER_FILE+x} ]; then
+    mkdir -p ${TMP_DIR}/tmp
+    if [ "${GUIDING_CONTIGS: -3}" == ".gz" ]; then
+	GC=${GUIDING_CONTIGS##*/}
+	zcat ${GUIDING_CONTIGS} > ${TMP_DIR}/tmp/${GC%.gz}
+	GUIDING_CONTIGS=${TMP_DIR}/tmp/${GC%.gz}
+    elif [ -z ${GUIDING_CONTIGS+x} ]; then
+	echo -n "No guiding contigs given! "
+	echo "Will use the base assembly for this purpose."
+	GUIDING_CONTIGS=${BASE_ASSEMBLY}
+    fi
+    if [ "${GUIDING_CONTIGS: -3}" == ".fa" ] || [ "${GUIDING_CONTIGS: -6}" == ".fasta" ]; then
+	awk 'BEGIN {RS = ">" ; FS = "\n"} NR > 1 {totlen=0; printf "@"$1"\n"; for(c=2;c<NF;c++){printf $c; totlen+=length($c);}; printf "\n+\n";  for(c=0;c<totlen;c++) printf "H"; printf "\n"}' ${GUIDING_CONTIGS} | sed '/^@/s/ .*$//g' > ${TMP_DIR}/gc.fq
+    else
+	cp ${GUIDING_CONTIGS} ${TMP_DIR}/gc.fq
+    fi
+    # RUN isONclust!
+    isONclust --isoseq --t ${CPU} --fastq ${TMP_DIR}/gc.fq --outfolder ${TMP_DIR}/tmp
+    mv ${TMP_DIR}/tmp/final_clusters.tsv ${TMP_DIR}/final_clusters.tsv
+    rm ${TMP_DIR}/tmp -rf
+    CLUSTER_FILE=${TMP_DIR}/final_clusters.tsv
+fi
+
+CLUSTER_DIR=${TMP_DIR}/clusters
+if ! [ -z ${OLD_STYLE+x} ]; then
+    minimap2 -ax sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} > ${TMP_DIR}/align.sam
+    #This is (was) the true bottleneck!
+    ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${CLUSTER_FILE} ${TMP_DIR}/align.sam &
+else
+    minimap2 -2 -x sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | awk '{ print $1"\t"$6 }' | uniq > ${TMP_DIR}/align.csv
+    sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/align.csv > ${TMP_DIR}/align.sorted.tsv
+    join -j 2 <(sort -k2 ${TMP_DIR}/final_clusters.tsv) ${TMP_DIR}/align.sorted.tsv | awk '{print $2"\t"$3}' | uniq > ${TMP_DIR}/sr_clusters.tsv
+fi
+
+if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
+    [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv <(zcat ${INPUT_FASTX_1}) <(zcat ${INPUT_FASTX_2}) &
+    zcat ${INPUT_FASTX_1} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len1.txt &
+    zcat ${INPUT_FASTX_2} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len2.txt &
+else
+    [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv ${INPUT_FASTX_1} ${INPUT_FASTX_2} &
+    awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_1} > ${TMP_DIR}/len1.txt &
+    awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_2} > ${TMP_DIR}/len2.txt &
+fi
+wait
+rm -f ${TMP_DIR}/align.*
+export RDLEN_1=`cat ${TMP_DIR}/len1.txt`
+export RDLEN_2=`cat ${TMP_DIR}/len2.txt`
+
+open_sem(){
+    mkfifo pipe-$$
+    exec 3<>pipe-$$
+    rm pipe-$$
+    local i=$1
+    for((;i>0;i--)); do
+        printf %s 000 >&3
+    done
+}
+
+run_with_lock_no_exit(){
+    local x
+    read -u 3 -n 3 x && ((0==x)) || exit $x
+    (
+     ( "$@"; )
+     RVAL=$?
+     if [ $((${RVAL})) -ne 0 ]; then
+         printf 'WARNING: Process failed with return value no %.3d: %s\n' ${RVAL} "${1}" >&2
+     fi
+     printf '%.3d' 0 >&3
+    )&
+}
+
+shannon_cl_1(){
+    f=${1}
+    RDLEN_1=${2}
+    RDLEN_2=${3}
+
+    F_1=${f}/1.fq
+    F_2=${f}/2.fq
+    [ -f ${f}/1.fq.gz ] && F_1=${f}/1.fq.gz
+    [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
+    if [ -f ${F_1} ]; then
+	echo >&2 "${f} EXISTS! STARTING...."
+	shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=1 --avail_mem=10G --bypass_pre_correct_read -u 1 > /dev/null 2>&1 || echo >&2 "${f} failed!"
+	if test -f ${f}/tmp/reconstructed_seq.fasta; then
+	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
+	    mv ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
+	    rm ${F_1} ${F_2} ${f}/tmp -fr
+	fi
+    else
+	echo >&2 "${f} IS MISSING!"
+    fi
+}
+
+open_sem ${CPU}
+run_with_lock_no_exit shannon_cl_1 ${CLUSTER_DIR}/unmapped ${RDLEN_1} ${RDLEN_2}
+for f in ${CLUSTER_DIR}/[0-9]* ; do
+    run_with_lock_no_exit shannon_cl_1 ${f} ${RDLEN_1} ${RDLEN_2}
+done
+wait
+
+#Run merge!
+touch ${TMP_DIR}/out.fa
+for f in ${CLUSTER_DIR}/*/transcripts.fa; do
+    CLUST=${f%/*}
+    CLUST=${CLUST##*/}
+    sed "/^>/s/^>/>${CLUST}_/g" ${f} >> ${TMP_DIR}/out.fa && rm ${f} -f
+done
+rm -r ${CLUSTER_DIR}
+sed "/^>/s/^>/>base_/g" ${BASE_ASSEMBLY} >> ${TMP_DIR}/out.fa
+
+if ! [ -z ${UNIQ} ]; then
+    awk '(/^>/){ printf "%s\t",$1}(!/^>/){ print }' ${TMP_DIR}/out.fa | \
+	sort --key=2 --parallel=${CPU} -S40% | uniq --skip-fields=1 | \
+	awk '{print $1"\n"$2}' > ${OUTPUT_DIR}/clustrast.out.fa
+else
+    mv ${TMP_DIR}/out.fa ${OUTPUT_DIR}/clustrast.out.fa
+fi
+rm -fr ${TMP_DIR}/out.fa ${TMP_DIR}/tmp
+
+echo "Thank you for running ClusTrAsT! Have a nice day!"
