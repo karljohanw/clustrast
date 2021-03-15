@@ -158,9 +158,13 @@ if ! [ -z ${OLD_STYLE+x} ]; then
     #This is (was) the true bottleneck!
     ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${CLUSTER_FILE} ${TMP_DIR}/align.sam &
 else
-    minimap2 -2 -x sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | awk '{ print $1"\t"$6 }' | uniq > ${TMP_DIR}/align.csv
+    minimap2 -2 -x sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} > ${TMP_DIR}/align.paf
+    awk '{ print $1"\t"$6 }' ${TMP_DIR}/align.paf | uniq > ${TMP_DIR}/align.csv && rm ${TMP_DIR}/align.paf
     sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/align.csv > ${TMP_DIR}/align.sorted.tsv
-    join -j 2 <(sort -k2 ${TMP_DIR}/final_clusters.tsv) ${TMP_DIR}/align.sorted.tsv | awk '{print $2"\t"$3}' | uniq > ${TMP_DIR}/sr_clusters.tsv
+    rm ${TMP_DIR}/align.csv
+    sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/final_clusters.tsv > ${TMP_DIR}/final_clusters.sorted.tsv
+    rm ${TMP_DIR}/final_clusters.tsv
+    join -j 2 ${TMP_DIR}/final_clusters.sorted.tsv ${TMP_DIR}/align.sorted.tsv | awk '{print $2"\t"$3}' | uniq > ${TMP_DIR}/sr_clusters.tsv
 fi
 
 if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
