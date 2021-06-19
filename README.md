@@ -17,6 +17,7 @@ And also, you must make sure that all of the following dependencies are availabl
 
 - shannon_cpp
 - minimap2
+- cut
 - awk
 - sed
 - python3
@@ -33,7 +34,7 @@ And also, you must make sure that all of the following dependencies are availabl
 ## All options
 
 ```shell
-usage: clustrast -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--no-secondary-alignments] [--old-style-sr-clustering]
+usage: clustrast -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--secondary-alignments N_SECONDARY_ALIGNMENTS] [--old-style-sr-clustering]
 options:
   # Mandatory options:
   -1      Short paired ended read file, left end, in FASTx format, compressed or uncompressed
@@ -49,7 +50,7 @@ options:
   -u      Uniqueify transcripts (off by default)
 
   # Other options:
-  --no-secondary-alignments     Turns off the option for secondary alignments in minimap2.
+  --secondary-alignments        The number of secondary alignments for minimap2 to put out (100000 by default).
   --old-style-sr-clustering     Use the slower srClust (used in paper) instead of the faster srClust2 for the short read clustering.
 ```
 

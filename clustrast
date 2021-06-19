@@ -1,11 +1,12 @@
 #!/bin/bash
 
 CPU=1
-SECAL='yes'
+SECAL='100000'
+SECAL_YN='yes'
 SRCLUST_CMD='srClust2'
 
 help_text() {
-    echo "usage: $1 -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--no-secondary-alignments] [--old-style-sr-clustering]"
+    echo "usage: $1 -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--secondary-alignments N_SECONDARY_ALIGNMENTS] [--old-style-sr-clustering]"
     echo "       $1 -h  #to show this help"
     echo "       $1 -d  #to check dependencies and quit"
 }
@@ -40,8 +41,9 @@ while (( "$#" )); do
 	    help_text "${THIS_CMD}"
 	    exit 0
 	elif [ ${1:1:1} == '-' ]; then
-	    if [ ${1:2:6} == 'no-sec' ]; then
-		SECAL='no'
+	    if [ ${1:2:6} == 'second' ]; then
+		SECAL=${2}
+		[ ${SECAL} == '0' ] && SECAL_YN='no'
 	    elif [ ${1:2:9} == 'old-style' ]; then
 		OLD_STYLE=t
 		SRCLUST_CMD='srClust'
@@ -154,11 +156,11 @@ fi
 
 CLUSTER_DIR=${TMP_DIR}/clusters
 if ! [ -z ${OLD_STYLE+x} ]; then
-    minimap2 -ax sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} > ${TMP_DIR}/align.sam
+    minimap2 -ax sr --secondary=${SECAL_YN} -N${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} > ${TMP_DIR}/align.sam
     #This is (was) the true bottleneck!
     ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${CLUSTER_FILE} ${TMP_DIR}/align.sam &
 else
-    minimap2 -2 -x sr --secondary=${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | \
+    minimap2 -2 -x sr --secondary=${SECAL_YN} -N${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | \
 	cut -f1,6 | uniq > ${TMP_DIR}/align.csv
     sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/align.csv > ${TMP_DIR}/align.sorted.tsv
     rm ${TMP_DIR}/align.csv
