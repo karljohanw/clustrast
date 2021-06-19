@@ -204,10 +204,11 @@ run_with_lock_no_exit(){
     )&
 }
 
-shannon_cl_1(){
+shannon_cl(){
     f=${1}
     RDLEN_1=${2}
     RDLEN_2=${3}
+    CPU=${4:-1}
 
     F_1=${f}/1.fq
     F_2=${f}/2.fq
@@ -215,7 +216,7 @@ shannon_cl_1(){
     [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
     if [ -f ${F_1} ]; then
 	echo >&2 "${f} EXISTS! STARTING...."
-	shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=1 --avail_mem=10G --bypass_pre_correct_read -u 1 > /dev/null 2>&1 || echo >&2 "${f} failed!"
+	shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=${CPU} --avail_mem=10G --bypass_pre_correct_read --num_sort_thread=${CPU} > /dev/null 2>&1 || echo >&2 "${f} failed!"
 	if test -f ${f}/tmp/reconstructed_seq.fasta; then
 	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
 	    mv ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
@@ -227,9 +228,9 @@ shannon_cl_1(){
 }
 
 open_sem ${CPU}
-run_with_lock_no_exit shannon_cl_1 ${CLUSTER_DIR}/unmapped ${RDLEN_1} ${RDLEN_2}
+run_with_lock_no_exit shannon_cl ${CLUSTER_DIR}/unmapped ${RDLEN_1} ${RDLEN_2}
 for f in ${CLUSTER_DIR}/[0-9]* ; do
-    run_with_lock_no_exit shannon_cl_1 ${f} ${RDLEN_1} ${RDLEN_2}
+    run_with_lock_no_exit shannon_cl ${f} ${RDLEN_1} ${RDLEN_2}
 done
 wait
 
