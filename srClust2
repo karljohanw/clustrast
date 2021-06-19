@@ -36,6 +36,7 @@ def cluster_srs(fx_out_1, fx_out_2, output='cluster'):
         with open('{}/{}/2.fq'.format(output, nr), 'w') as fq_file:
             for right in fx_out_2[nr]:
                 print(right, file=fq_file)
+    os._exit(0)
 
 def main():
     import argparse
