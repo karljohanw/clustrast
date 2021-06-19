@@ -27,7 +27,7 @@ def prepare_cluster_srs(cluster_dict, fx_1, fx_2):
             fx_out_2.setdefault(nr,[]).append(r_2)
     return fx_out_1, fx_out_2
 
-def cluster_srs(fx_out_1, fx_out_2, output='cluster')
+def cluster_srs(fx_out_1, fx_out_2, output='cluster'):
     for nr in fx_out_1.keys():
         os.makedirs('{}/{}'.format(output, nr), exist_ok=True)
         with open('{}/{}/1.fq'.format(output, nr), 'w') as fq_file:
