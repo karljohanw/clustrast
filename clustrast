@@ -216,6 +216,7 @@ shannon_cl(){
     RDLEN_1=${2}
     RDLEN_2=${3}
     CPU=${4:-1}
+    MEM=20
 
     F_1=${f}/1.fq
     F_2=${f}/2.fq
@@ -223,11 +224,23 @@ shannon_cl(){
     [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
     if [ -f ${F_1} ]; then
 	echo >&2 "${f} EXISTS! STARTING...."
-	shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=${CPU} --avail_mem=10G --bypass_pre_correct_read --num_sort_thread=${CPU} > /dev/null 2>&1 || echo >&2 "${f} failed!"
-	if test -f ${f}/tmp/reconstructed_seq.fasta; then
+	shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=${CPU} --avail_mem=${MEM}G --bypass_pre_correct_read --num_sort_thread=${CPU} > /dev/null 2>&1
+	RES=${?}
+	while [ ${RES} -eq 0 ] && test ! -s ${f}/tmp/reconstructed_seq.fasta && [ ${CPU} -le 128 ]; do
+	    # hack: in a few occurences, shannon seems to only produce output in parallel mode!
+	    CPU=$(( ${CPU} * 2 ))
+	    echo >&2 "${f} RETRIES WITH CPU=${CPU}...."
+	    shannon_cpp shannon --output_dir ${f}/tmp --pair_read_length ${RDLEN_1} ${RDLEN_2} --PE_read_path ${F_1} ${F_2} --num_process=${CPU} --avail_mem=${MEM}G --bypass_pre_correct_read --num_sort_thread=2 > /dev/null 2>&1
+	    RES=${?}
+	done
+	if [ ${RES} -ne 0 ]; then
+	    echo >&2 "${f} FAILED!"
+	elif test -s ${f}/tmp/reconstructed_seq.fasta; then
 	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
 	    mv ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
 	    rm ${F_1} ${F_2} ${f}/tmp -fr
+	else
+	    echo >&2 "${f} NO OUTPUT!"
 	fi
     else
 	echo >&2 "${f} IS MISSING!"
@@ -237,6 +250,7 @@ shannon_cl(){
 open_sem ${CPU}
 run_with_lock_no_exit shannon_cl ${CLUSTER_DIR}/unmapped ${RDLEN_1} ${RDLEN_2}
 for f in ${CLUSTER_DIR}/[0-9]* ; do
+    test -s ${f}/transcripts.fa && continue
     run_with_lock_no_exit shannon_cl ${f} ${RDLEN_1} ${RDLEN_2}
 done
 wait
