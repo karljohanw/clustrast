@@ -120,7 +120,7 @@ if [ -z ${BASE_ASSEMBLY+x} ]; then
     echo "No base assembly given! Will generate one by TransABySS."
     KMERS="25 32 39 46 53"
     for K in ${KMERS}; do
-	transabyss -k ${K} --pe ${INPUT_FASTX_1} ${INPUT_FASTX_2} --cleanup 3 --threads ${CPU} --outdir ${TMP_DIR}/ab/${K} --stage dbg || test -f ${OUTPUT_DIR}/transabyss.DBG.COMPLETE &
+	transabyss -k ${K} --pe ${INPUT_FASTX_1} ${INPUT_FASTX_2} --cleanup 3 --threads ${CPU} --outdir ${TMP_DIR}/ab/${K} --stage dbg || test -f ${TMP_DIR}/ab/${K}/transabyss.DBG.COMPLETE &
     done
     wait
     for K in ${KMERS}; do
