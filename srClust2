@@ -1,42 +1,43 @@
 #!/usr/bin/env python3
 import pysam, os
 
-def parse_tsv_file(tsv_file):
-    rval={}
+def parse_tsv_file(tsv_file, fx_out_1, fx_out_2, output):
+    cl_prev = -1
+    fx_1, fx_2 = [], []
     for line in tsv_file:
         cluster, member = line.rstrip('\n').split(maxsplit=1)
-        rval.setdefault(member,[]).append(cluster)
-    return rval
+        if cluster != cl_prev and cl_prev != -1:
+            os.makedirs('{}/{}'.format(output, cl_prev), exist_ok=True)
+            with open('{}/{}/1.fq'.format(output, cl_prev), 'w') as fq_file:
+                for left in fx_1:
+                    print(left, file=fq_file)
+            with open('{}/{}/2.fq'.format(output, cl_prev), 'w') as fq_file:
+                for right in fx_2:
+                    print(right, file=fq_file)
+            fx_1, fx_2 = [], []
+        memh = hash(member)
+        fx_1.append(fx_out_1[memh])
+        fx_2.append(fx_out_2[memh])
+        cl_prev = cluster
+    if fx_1:
+        os.makedirs('{}/{}'.format(output, cl_prev), exist_ok=True)
+        with open('{}/{}/1.fq'.format(output, cl_prev), 'w') as fq_file:
+            for left in fx_1:
+                print(left, file=fq_file)
+        with open('{}/{}/2.fq'.format(output, cl_prev), 'w') as fq_file:
+            for right in fx_2:
+                print(right, file=fq_file)
+    os._exit(0)
 
-def get_if_mapped(a, b):
-    try:
-        return a[b]
-    except KeyError:
-        return ['unmapped']
-
-def prepare_cluster_srs(cluster_dict, fx_1, fx_2):
+def parse_fastxs(cluster_dict, fx_1, fx_2):
     fx_out_1, fx_out_2 = {},{}
     for r_1 in fx_1:
         r_2 = next(fx_2)
-        if r_1.name != r_2.name:
-            #allow for read names on the form X/1 and X/2:
-            if r_1.name[:-2] != r_2.name[:-2]:
-                raise ValueError("ERROR! {} AND {} ARE NOT SAME NAME!".format(r_1.name,r_2.name))
-        for nr in get_if_mapped(cluster_dict, r_1.name):
-            fx_out_1.setdefault(nr,[]).append(r_1)
-            fx_out_2.setdefault(nr,[]).append(r_2)
+        h_1 = hash(r_1.name)
+        h_2 = hash(r_2.name)
+        fx_out_1[h_1] = r_1
+        fx_out_2[h_2] = r_2
     return fx_out_1, fx_out_2
-
-def cluster_srs(fx_out_1, fx_out_2, output='cluster'):
-    for nr in fx_out_1.keys():
-        os.makedirs('{}/{}'.format(output, nr), exist_ok=True)
-        with open('{}/{}/1.fq'.format(output, nr), 'w') as fq_file:
-            for left in fx_out_1[nr]:
-                print(left, file=fq_file)
-        with open('{}/{}/2.fq'.format(output, nr), 'w') as fq_file:
-            for right in fx_out_2[nr]:
-                print(right, file=fq_file)
-    os._exit(0)
 
 def main():
     import argparse
@@ -52,12 +53,11 @@ def main():
     fx_out_1, fx_out_2 = {}, {}
     args = parser.parse_args()
     os.makedirs(args.output, exist_ok=True)
-    with open(args.cluster_file, 'r') as cluster_file:
-        cluster_dict = parse_tsv_file(cluster_file)
     with pysam.FastxFile(args.left_file) as fx_1:
         with pysam.FastxFile(args.right_file) as fx_2:
-            fx_out_1, fx_out_2 = prepare_cluster_srs(cluster_dict, fx_1, fx_2)
-    cluster_srs(fx_out_1, fx_out_2, args.output)
+            fx_out_1, fx_out_2 = parse_fastxs(cluster_dict, fx_1, fx_2)
+    with open(args.cluster_file, 'r') as cluster_file:
+        parse_tsv_file(cluster_file, fx_out_1, fx_out_2, args.output)
 
 if __name__ == "__main__":
     main()

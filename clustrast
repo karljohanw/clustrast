@@ -160,13 +160,18 @@ if ! [ -z ${OLD_STYLE+x} ]; then
     #This is (was) the true bottleneck!
     ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${CLUSTER_FILE} ${TMP_DIR}/align.sam &
 else
-    minimap2 -2 -x sr --secondary=${SECAL_YN} -N${SECAL} -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | \
+    minimap2 -2 -x sr --secondary=${SECAL_YN} -N${SECAL} --paf-no-hit -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | \
 	cut -f1,6 | uniq > ${TMP_DIR}/align.csv
+    grep -s '^unmapped' ${TMP_DIR}/final_clusters.tsv || echo -e 'unmapped\t*' >> ${TMP_DIR}/final_clusters.tsv
     sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/align.csv > ${TMP_DIR}/align.sorted.tsv
     rm ${TMP_DIR}/align.csv
     sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/final_clusters.tsv > ${TMP_DIR}/final_clusters.sorted.tsv
     rm ${TMP_DIR}/final_clusters.tsv
     join -j 2 ${TMP_DIR}/final_clusters.sorted.tsv ${TMP_DIR}/align.sorted.tsv | cut -d' ' -f2-3 | uniq > ${TMP_DIR}/sr_clusters.tsv
+    sort -k1n,1 --parallel=${CPU} -S40% ${TMP_DIR}/sr_clusters.tsv | uniq > ${TMP_DIR}/sr_clusters.sorted.tsv
+    rm -f ${TMP_DIR}/sr_clusters.tsv
+    mv ${TMP_DIR}/sr_clusters.sorted.tsv ${TMP_DIR}/sr_clusters.tsv
+
 fi
 
 if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
