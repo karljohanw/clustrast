@@ -168,6 +168,7 @@ else
     sort -k2 --parallel=${CPU} -S40% ${TMP_DIR}/final_clusters.tsv > ${TMP_DIR}/final_clusters.sorted.tsv
     rm ${TMP_DIR}/final_clusters.tsv
     join -j 2 ${TMP_DIR}/final_clusters.sorted.tsv ${TMP_DIR}/align.sorted.tsv | cut -d' ' -f2-3 | uniq > ${TMP_DIR}/sr_clusters.tsv
+    rm -f ${TMP_DIR}/final_clusters.sorted.tsv ${TMP_DIR}/align.sorted.tsv
     sort -k1n,1 --parallel=${CPU} -S40% ${TMP_DIR}/sr_clusters.tsv | uniq > ${TMP_DIR}/sr_clusters.sorted.tsv
     rm -f ${TMP_DIR}/sr_clusters.tsv
     mv ${TMP_DIR}/sr_clusters.sorted.tsv ${TMP_DIR}/sr_clusters.tsv
