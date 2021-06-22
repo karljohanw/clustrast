@@ -238,7 +238,8 @@ shannon_cl(){
 	    echo >&2 "${f} FAILED!"
 	elif test -s ${f}/tmp/reconstructed_seq.fasta; then
 	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
-	    mv ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
+	    CLUST=${f##*/}
+	    sed "/^>/s/^>/>${CLUST}_/g" ${f}/tmp/reconstructed_seq.fasta > ${f}/transcripts.fa
 	    rm ${F_1} ${F_2} ${f}/tmp -fr
 	else
 	    echo >&2 "${f} NO OUTPUT!"
@@ -259,9 +260,7 @@ wait
 #Run merge!
 touch ${TMP_DIR}/out.fa
 for f in ${CLUSTER_DIR}/*/transcripts.fa; do
-    CLUST=${f%/*}
-    CLUST=${CLUST##*/}
-    sed "/^>/s/^>/>${CLUST}_/g" ${f} >> ${TMP_DIR}/out.fa && rm ${f} -f
+    cat ${f} >> ${TMP_DIR}/out.fa && rm ${f} -f
 done
 rm -r ${CLUSTER_DIR}
 sed "/^>/s/^>/>base_/g" ${BASE_ASSEMBLY} >> ${TMP_DIR}/out.fa
