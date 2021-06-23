@@ -172,19 +172,22 @@ else
     sort -k1n,1 --parallel=${CPU} -S40% ${TMP_DIR}/sr_clusters.tsv | uniq > ${TMP_DIR}/sr_clusters.sorted.tsv
     rm -f ${TMP_DIR}/sr_clusters.tsv
     mv ${TMP_DIR}/sr_clusters.sorted.tsv ${TMP_DIR}/sr_clusters.tsv
-
 fi
 
 if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
     [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv <(zcat ${INPUT_FASTX_1}) <(zcat ${INPUT_FASTX_2}) &
     zcat ${INPUT_FASTX_1} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len1.txt &
+    RL1PID=${!}
     zcat ${INPUT_FASTX_2} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len2.txt &
+    RL2PID=${!}
 else
     [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv ${INPUT_FASTX_1} ${INPUT_FASTX_2} &
     awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_1} > ${TMP_DIR}/len1.txt &
+    RL1PID=${!}
     awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_2} > ${TMP_DIR}/len2.txt &
+    RL2PID=${!}
 fi
-wait
+wait ${RL1PID} ${RL2PID}
 rm -f ${TMP_DIR}/align.*
 export RDLEN_1=`cat ${TMP_DIR}/len1.txt`
 export RDLEN_2=`cat ${TMP_DIR}/len2.txt`
@@ -214,13 +217,12 @@ run_with_lock_no_exit(){
 
 shannon_cl(){
     f=${1}
-    RDLEN_1=${2}
-    RDLEN_2=${3}
-    CPU=${4:-1}
-    MEM=20
+    CPU=${2:-1}
+    MEM=${3:-20}
 
     F_1=${f}/1.fq
     F_2=${f}/2.fq
+    [ -z ${OLD_STYLE+x} ] && while test ! -f ${f}/done.txt; do sleep 1; done
     [ -f ${f}/1.fq.gz ] && F_1=${f}/1.fq.gz
     [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
     if [ -f ${F_1} ]; then
@@ -236,6 +238,7 @@ shannon_cl(){
 	done
 	if [ ${RES} -ne 0 ]; then
 	    echo >&2 "${f} FAILED!"
+	    rm ${f} -rf
 	elif test -s ${f}/tmp/reconstructed_seq.fasta; then
 	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
 	    CLUST=${f##*/}
@@ -243,35 +246,68 @@ shannon_cl(){
 	    rm ${F_1} ${F_2} ${f}/tmp -fr
 	else
 	    echo >&2 "${f} NO OUTPUT!"
+	    rm ${f} -rf
 	fi
     else
 	echo >&2 "${f} IS MISSING!"
+	rm ${f} -rf
     fi
 }
 
-open_sem ${CPU}
-run_with_lock_no_exit shannon_cl ${CLUSTER_DIR}/unmapped ${RDLEN_1} ${RDLEN_2}
-for f in ${CLUSTER_DIR}/[0-9]* ; do
-    test -s ${f}/transcripts.fa && continue
-    run_with_lock_no_exit shannon_cl ${f} ${RDLEN_1} ${RDLEN_2}
-done
-wait
+smart_merge() {
+    touch ${TMP_DIR}/out.raw.fa
+    while test -z "$(find ${CLUSTER_DIR} -maxdepth 0 -empty)"; do
+	for f in ${CLUSTER_DIR}/*/transcripts.fa; do
+	    DIR=${f%/*}
+	    [ "${DIR##*/}" == "*" ] && continue
+	    test -d ${DIR}/tmp && continue
+	    cat ${f} >> ${TMP_DIR}/out.raw.fa && rm ${DIR} -fr
+	done
+	sleep 1
+    done
+}
 
-#Run merge!
-touch ${TMP_DIR}/out.fa
-for f in ${CLUSTER_DIR}/*/transcripts.fa; do
-    cat ${f} >> ${TMP_DIR}/out.fa && rm ${f} -f
-done
-rm -r ${CLUSTER_DIR}
+if ! [ -z ${OLD_STYLE+x} ]; then
+    wait
+    open_sem ${CPU}
+    run_with_lock_no_exit shannon_cl ${CLUSTER_DIR}/unmapped
+    for f in ${CLUSTER_DIR}/[0-9]* ; do
+	test -s ${f}/transcripts.fa && continue
+	run_with_lock_no_exit shannon_cl ${f}
+    done
+    wait
+    smart_merge
+else
+    let MAXCLUS=`tail -n1 ${TMP_DIR}/sr_clusters.tsv | awk '{ print $1 }'`
+    shannon_cl ${CLUSTER_DIR}/0 $(( ${CPU} - 1 ))
+    shannon_cl ${CLUSTER_DIR}/unmapped $(( ${CPU} - 1 ))
+    let i=1
+    open_sem $(( ${CPU} - 1 ))
+    run_with_lock_no_exit smart_merge
+    while [ ${i} -le ${MAXCLUS} ]; do
+	f=${CLUSTER_DIR}/${i}
+	test -s ${f}/transcripts.fa && continue
+	run_with_lock_no_exit shannon_cl ${f}
+	i=$(( ${i} + 1 ))
+    done
+    wait
+fi
+
+cp ${TMP_DIR}/out.raw.fa ${TMP_DIR}/out.fa
+rm -rf ${CLUSTER_DIR}
 sed "/^>/s/^>/>base_/g" ${BASE_ASSEMBLY} >> ${TMP_DIR}/out.fa
 
-if ! [ -z ${UNIQ} ]; then
+if ! [ -z ${UNIQ+x} ]; then
     awk '(/^>/){ printf "%s\t",$1}(!/^>/){ print }' ${TMP_DIR}/out.fa | \
 	sort --key=2 --parallel=${CPU} -S40% | uniq --skip-fields=1 | \
 	awk '{print $1"\n"$2}' > ${OUTPUT_DIR}/clustrast.out.fa
+    awk '(/^>/){ printf "%s\t",$1}(!/^>/){ print }' ${TMP_DIR}/out.raw.fa | \
+	sort --key=2 --parallel=${CPU} -S40% | uniq --skip-fields=1 | \
+	awk '{print $1"\n"$2}' > ${OUTPUT_DIR}/clustrast.out.raw.fa
 else
     mv ${TMP_DIR}/out.fa ${OUTPUT_DIR}/clustrast.out.fa
+    mv ${TMP_DIR}/out.raw.fa ${OUTPUT_DIR}/clustrast.out.raw.fa
 fi
-rm -fr ${TMP_DIR}/out.fa ${TMP_DIR}/tmp
+rm -fr ${TMP_DIR}/out.fa ${TMP_DIR}/out.raw.fa ${TMP_DIR}/tmp
 
 echo "Thank you for running ClusTrAsT! Have a nice day!"

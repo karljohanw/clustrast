@@ -14,6 +14,9 @@ def parse_tsv_file(tsv_file, fx_out_1, fx_out_2, output):
             with open('{}/{}/2.fq'.format(output, cl_prev), 'w') as fq_file:
                 for right in fx_2:
                     print(right, file=fq_file)
+            os.makedirs('{}/{}'.format(output, cluster), exist_ok=True)
+            with open('{}/{}/done.txt'.format(output, cl_prev), 'w') as fq_file:
+                pass
             fx_1, fx_2 = [], []
         memh = hash(member)
         fx_1.append(fx_out_1[memh])
@@ -27,6 +30,8 @@ def parse_tsv_file(tsv_file, fx_out_1, fx_out_2, output):
         with open('{}/{}/2.fq'.format(output, cl_prev), 'w') as fq_file:
             for right in fx_2:
                 print(right, file=fq_file)
+        with open('{}/{}/done.txt'.format(output, cl_prev), 'w') as fq_file:
+            pass
     os._exit(0)
 
 def parse_fastxs(cluster_dict, fx_1, fx_2):
