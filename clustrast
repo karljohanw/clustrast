@@ -241,9 +241,13 @@ shannon_cl(){
 	    rm ${f} -rf
 	elif test -s ${f}/tmp/reconstructed_seq.fasta; then
 	    echo >&2 "${f} FINISHED! MOVE THE FILES..."
-	    CLUST=${f##*/}
-	    sed "/^>/s/^>/>${CLUST}_/g" ${f}/tmp/reconstructed_seq.fasta > ${f}/transcripts.fa
-	    rm ${F_1} ${F_2} ${f}/tmp -fr
+	    if [ -z ${OLD_STYLE+x} ]; then
+		ln -sf ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
+	    else
+		cp ${f}/tmp/reconstructed_seq.fasta ${f}/transcripts.fa
+		rm ${f}/tmp -rf
+	    fi
+	    rm ${F_1} ${F_2} ${f}/done.txt -fr
 	else
 	    echo >&2 "${f} NO OUTPUT!"
 	    rm ${f} -rf
@@ -259,11 +263,13 @@ smart_merge() {
     while test -z "$(find ${CLUSTER_DIR} -maxdepth 0 -empty)"; do
 	for f in ${CLUSTER_DIR}/*/transcripts.fa; do
 	    DIR=${f%/*}
-	    [ "${DIR##*/}" == "*" ] && continue
-	    test -d ${DIR}/tmp && continue
-	    cat ${f} >> ${TMP_DIR}/out.raw.fa && rm ${DIR} -fr
+	    CLUST=${DIR##*/}
+	    [ "${CLUST}" == "*" ] && continue
+	    test -f ${f}/done.txt && continue
+	    sed "/^>/s/^>/>${CLUST}_/g" ${f} >> ${TMP_DIR}/out.raw.fa
+	    while ! rm ${DIR} -fr; do sleep 1; done
 	done
-	sleep 1
+	sleep 5
     done
 }
 
