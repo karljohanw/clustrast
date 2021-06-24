@@ -222,7 +222,6 @@ shannon_cl(){
 
     F_1=${f}/1.fq
     F_2=${f}/2.fq
-    test -d ${f} || return
     [ -z ${OLD_STYLE+x} ] && while test ! -f ${f}/done.txt; do sleep 1; done
     [ -f ${f}/1.fq.gz ] && F_1=${f}/1.fq.gz
     [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
@@ -279,19 +278,17 @@ if ! [ -z ${OLD_STYLE+x} ]; then
     wait
     smart_merge
 else
-    let MAXCLUS=`tail -n1 ${TMP_DIR}/sr_clusters.tsv | awk '{ print $1 }'`
-    shannon_cl ${CLUSTER_DIR}/0 $(( ${CPU} - 1 ))
-    shannon_cl ${CLUSTER_DIR}/unmapped $(( ${CPU} - 1 ))
-    let i=0
+    CLUSTERS=`cut -f1 -d ' ' ${TMP_DIR}/sr_clusters.tsv | uniq`
+    mkdir -p ${CLUSTER_DIR}
+    touch ${CLUSTER_DIR}/running.txt
     open_sem $(( ${CPU} - 1 ))
     run_with_lock_no_exit smart_merge
-    while [ ${i} -lt ${MAXCLUS} ]; do
-	i=$(( ${i} + 1 ))
+    for i in "${CLUSTERS}"; do
 	f=${CLUSTER_DIR}/${i}
-	test -d ${f} || continue
 	test -s ${f}/transcripts.fa && continue
 	run_with_lock_no_exit shannon_cl ${f}
     done
+    rm -f ${CLUSTER_DIR}/running.txt
     wait
 fi
 
