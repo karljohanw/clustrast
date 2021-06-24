@@ -222,6 +222,7 @@ shannon_cl(){
 
     F_1=${f}/1.fq
     F_2=${f}/2.fq
+    test -d ${f} || return
     [ -z ${OLD_STYLE+x} ] && while test ! -f ${f}/done.txt; do sleep 1; done
     [ -f ${f}/1.fq.gz ] && F_1=${f}/1.fq.gz
     [ -f ${f}/2.fq.gz ] && F_2=${f}/2.fq.gz
@@ -286,6 +287,7 @@ else
     run_with_lock_no_exit smart_merge
     while [ ${i} -le ${MAXCLUS} ]; do
 	f=${CLUSTER_DIR}/${i}
+	test -d ${f} || continue
 	test -s ${f}/transcripts.fa && continue
 	run_with_lock_no_exit shannon_cl ${f}
 	i=$(( ${i} + 1 ))
