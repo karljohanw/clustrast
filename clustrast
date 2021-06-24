@@ -282,15 +282,15 @@ else
     let MAXCLUS=`tail -n1 ${TMP_DIR}/sr_clusters.tsv | awk '{ print $1 }'`
     shannon_cl ${CLUSTER_DIR}/0 $(( ${CPU} - 1 ))
     shannon_cl ${CLUSTER_DIR}/unmapped $(( ${CPU} - 1 ))
-    let i=1
+    let i=0
     open_sem $(( ${CPU} - 1 ))
     run_with_lock_no_exit smart_merge
-    while [ ${i} -le ${MAXCLUS} ]; do
+    while [ ${i} -lt ${MAXCLUS} ]; do
+	i=$(( ${i} + 1 ))
 	f=${CLUSTER_DIR}/${i}
 	test -d ${f} || continue
 	test -s ${f}/transcripts.fa && continue
 	run_with_lock_no_exit shannon_cl ${f}
-	i=$(( ${i} + 1 ))
     done
     wait
 fi
