@@ -145,12 +145,12 @@ if [ -z ${CLUSTER_FILE+x} ]; then
     if [ "${GUIDING_CONTIGS: -3}" == ".fa" ] || [ "${GUIDING_CONTIGS: -6}" == ".fasta" ]; then
 	awk 'BEGIN {RS = ">" ; FS = "\n"} NR > 1 {totlen=0; printf "@"$1"\n"; for(c=2;c<NF;c++){printf $c; totlen+=length($c);}; printf "\n+\n";  for(c=0;c<totlen;c++) printf "H"; printf "\n"}' ${GUIDING_CONTIGS} | sed '/^@/s/ .*$//g' > ${TMP_DIR}/gc.fq
     else
-	cp ${GUIDING_CONTIGS} ${TMP_DIR}/gc.fq
+	sed '/^@/s/ .*$//g' ${GUIDING_CONTIGS} > ${TMP_DIR}/gc.fq
     fi
     # RUN isONclust!
     isONclust --isoseq --t ${CPU} --fastq ${TMP_DIR}/gc.fq --outfolder ${TMP_DIR}/tmp
     mv ${TMP_DIR}/tmp/final_clusters.tsv ${TMP_DIR}/final_clusters.tsv
-    rm ${TMP_DIR}/tmp -rf
+    rm ${TMP_DIR}/tmp ${TMP_DIR}/gc.fq -rf
     CLUSTER_FILE=${TMP_DIR}/final_clusters.tsv
 fi
 
@@ -160,6 +160,7 @@ if ! [ -z ${OLD_STYLE+x} ]; then
     #This is (was) the true bottleneck!
     ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${CLUSTER_FILE} ${TMP_DIR}/align.sam &
 else
+    set -e
     minimap2 -2 -x sr --secondary=${SECAL_YN} -N${SECAL} --paf-no-hit -t ${CPU} ${GUIDING_CONTIGS} ${INPUT_FASTX_1} ${INPUT_FASTX_2} | \
 	cut -f1,6 | uniq > ${TMP_DIR}/align.csv
     grep -s '^unmapped' ${TMP_DIR}/final_clusters.tsv || echo -e 'unmapped\t*' >> ${TMP_DIR}/final_clusters.tsv
@@ -172,6 +173,7 @@ else
     sort -k1n,1 --parallel=${CPU} -S40% ${TMP_DIR}/sr_clusters.tsv | uniq > ${TMP_DIR}/sr_clusters.sorted.tsv
     rm -f ${TMP_DIR}/sr_clusters.tsv
     mv ${TMP_DIR}/sr_clusters.sorted.tsv ${TMP_DIR}/sr_clusters.tsv
+    set +e
 fi
 
 if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
