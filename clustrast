@@ -4,11 +4,20 @@ CPU=1
 SECAL='100000'
 SECAL_YN='yes'
 SRCLUST_CMD='srClust2'
+ICAT='cat'
 
 help_text() {
     echo "usage: $1 -1 FASTX_LEFT_PAIRED_END_READS -2 FASTX_RIGHT_PAIRED_END_READS -o OUTPUT_DIR [-p THREADS] [-u|--uniqify] [-g FASTX_GUIDING_CONTIGS] [-b FASTX_BASE_ASSEMBLY] [-t TEMPARORY_DIRECTORY] [-c CLUSTER_FILE] [--secondary-alignments N_SECONDARY_ALIGNMENTS] [--old-style-sr-clustering]"
     echo "       $1 -h  #to show this help"
     echo "       $1 -d  #to check dependencies and quit"
+}
+
+force_fasta() {
+    if type seqtk &> /dev/null; then
+	seqtk seq -AC ${@}
+    else
+	awk '(/^[@>]/){sub(/^@/,">"); print $1; next}(/^+/){getline;next}{print}' ${@}
+    fi
 }
 
 THIS_CMD=${0}
@@ -63,6 +72,7 @@ if [ -z ${INPUT_FASTX_1+x} ] || [ -z ${INPUT_FASTX_2+x} ] || [ -z ${OUTPUT_DIR+x
     MUST_EXIT=t
 elif ! [ -z ${INPUT_FASTX_1+x} ] && [ -z ${INPUT_FASTX_1: -3} == '.gz' ]; then
     DO_ZCAT='zcat'
+    ICAT='zcat'
 elif ! [ -z ${GUIDING_CONTIGS+x} ] && [ -z ${GUIDING_CONTIGS: -3} == '.gz' ]; then
     DO_ZCAT='zcat'
 fi
@@ -176,19 +186,11 @@ else
     set +e
 fi
 
-if [ ${INPUT_FASTX_1: -3} == ".gz" ]; then
-    [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv <(zcat ${INPUT_FASTX_1}) <(zcat ${INPUT_FASTX_2}) &
-    zcat ${INPUT_FASTX_1} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len1.txt &
-    RL1PID=${!}
-    zcat ${INPUT_FASTX_2} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len2.txt &
-    RL2PID=${!}
-else
-    [ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv ${INPUT_FASTX_1} ${INPUT_FASTX_2} &
-    awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_1} > ${TMP_DIR}/len1.txt &
-    RL1PID=${!}
-    awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' ${INPUT_FASTX_2} > ${TMP_DIR}/len2.txt &
-    RL2PID=${!}
-fi
+[ -z ${OLD_STYLE+x} ] && ${SRCLUST_CMD} --output ${CLUSTER_DIR} ${TMP_DIR}/sr_clusters.tsv <(${ICAT} ${INPUT_FASTX_1} | force_fasta -) <(${ICAT} ${INPUT_FASTX_2} | force_fasta -) &
+${ICAT} ${INPUT_FASTX_1} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len1.txt &
+RL1PID=${!}
+${ICAT} ${INPUT_FASTX_2} | awk 'BEGIN{l=0}(NR%2==0 && l<length($0)){l=length($0)}END{print l}' > ${TMP_DIR}/len2.txt &
+RL2PID=${!}
 wait ${RL1PID} ${RL2PID}
 rm -f ${TMP_DIR}/align.*
 export RDLEN_1=`cat ${TMP_DIR}/len1.txt`
