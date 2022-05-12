@@ -143,7 +143,7 @@ if [ -z ${CLUSTER_FILE+x} ]; then
 	GUIDING_CONTIGS=${BASE_ASSEMBLY}
     fi
     if [ "${GUIDING_CONTIGS: -3}" == ".fa" ] || [ "${GUIDING_CONTIGS: -6}" == ".fasta" ]; then
-	awk 'BEGIN {RS = ">" ; FS = "\n"} NR > 1 {totlen=0; printf "@"$1"\n"; for(c=2;c<NF;c++){printf $c; totlen+=length($c);}; printf "\n+\n";  for(c=0;c<totlen;c++) printf "H"; printf "\n"}' ${GUIDING_CONTIGS} | sed '/^@/s/ .*$//g' > ${TMP_DIR}/gc.fq
+	awk 'BEGIN {RS = ">" ; FS = "\n"} NR > 1 {totlen=0; sub(/ .*$/,"",$1); printf "@"$1"\n"; for(c=2;c<NF;c++){printf $c; totlen+=length($c);}; printf "\n+\n";  for(c=0;c<totlen;c++) printf "H"; printf "\n"}' ${GUIDING_CONTIGS} > ${TMP_DIR}/gc.fq
     else
 	sed '/^@/s/ .*$//g' ${GUIDING_CONTIGS} > ${TMP_DIR}/gc.fq
     fi
