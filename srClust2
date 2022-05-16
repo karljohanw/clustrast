@@ -38,8 +38,13 @@ def parse_fastxs(cluster_dict, fx_1, fx_2):
     fx_out_1, fx_out_2 = {},{}
     for r_1 in fx_1:
         r_2 = next(fx_2)
-        h_1 = hash(r_1.name)
-        h_2 = hash(r_2.name)
+        hname_1 = r_1.name
+        hname_2 = r_2.name
+        if hname_1!=hname_2:
+            hname_1 = hname_1[:-2]
+            hname_2 = hname_2[:-2]
+        h_1 = hash(hname_1)
+        h_2 = hash(hname_2)
         fx_out_1[h_1] = r_1
         fx_out_2[h_2] = r_2
     return fx_out_1, fx_out_2
