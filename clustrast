@@ -70,10 +70,10 @@ done
 if [ -z ${INPUT_FASTX_1+x} ] || [ -z ${INPUT_FASTX_2+x} ] || [ -z ${OUTPUT_DIR+x} ]; then
     help_text "${THIS_CMD}"
     MUST_EXIT=t
-elif ! [ -z ${INPUT_FASTX_1+x} ] && [ -z ${INPUT_FASTX_1: -3} == '.gz' ]; then
+elif ! [ -z ${INPUT_FASTX_1+x} ] && [ ${INPUT_FASTX_1: -3} == '.gz' ]; then
     DO_ZCAT='zcat'
     ICAT='zcat'
-elif ! [ -z ${GUIDING_CONTIGS+x} ] && [ -z ${GUIDING_CONTIGS: -3} == '.gz' ]; then
+elif ! [ -z ${GUIDING_CONTIGS+x} ] && [ ${GUIDING_CONTIGS: -3} == '.gz' ]; then
     DO_ZCAT='zcat'
 fi
 
