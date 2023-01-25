@@ -109,8 +109,12 @@ if [ ! -z ${OUTPUT_DIR+x} ] && ! mkdir -p ${OUTPUT_DIR}; then
     MUST_EXIT=t
 fi
 
-if [ ! -f ${INPUT_FASTX_1} ] || [ ! -f ${INPUT_FASTX_2} ]; then
-    echo "ARGUMENT ERROR: At least one of the paired-ended input files does not appear to exist!"
+if [ ! -f ${INPUT_FASTX_1} ]; then
+    echo "ARGUMENT ERROR: Paired-ended input file not found: '${INPUT_FASTX_1}'"
+    MUST_EXIT=t
+fi
+if [ ! -f ${INPUT_FASTX_2} ]; then
+    echo "ARGUMENT ERROR: Paired-ended input file not found: '${INPUT_FASTX_2}'"
     MUST_EXIT=t
 fi
 
