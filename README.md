@@ -53,25 +53,26 @@ options:
   --secondary-alignments        The number of secondary alignments for minimap2 to put out (100000 by default).
   --old-style-sr-clustering     Use the slower srClust (used in paper) instead of the faster srClust2 for the short read clustering.
 ```
+*Note: ALL paths must be absolute paths, when entered as an argument.*
 
 ## Example usage
 
 To run ClusTrAsT with 15 threads on a paired-ended dataset and a set of CCS reads as guiding contigs:
 ```
-$ clustrast -1 sr_left.fq.gz -2 sr_right.fq.gz -p 15 -o output_dir -g ccs.fq
+$ clustrast -1 ~/sr_left.fq.gz -2 ~/sr_right.fq.gz -p 15 -o ~/output_dir -g ~/ccs.fq
 ```
 ClusTrAsT will here use Trans-ABySS for a base-assembly, isONclust for guiding contig clustering, minimap2+srClust for SR clustering according tho the other clustering, and shannon_cpp for clusterwise assembly.
 
 To run ClusTrAsT the same way _but_ without guiding contigs:
 ```
-$ clustrast -1 sr_left.fq.gz -2 sr_right.fq.gz -p 15 -o output_dir
+$ clustrast -1 ~/sr_left.fq.gz -2 ~/sr_right.fq.gz -p 15 -o ~/output_dir
 ```
 Since no guiding contigs were given, ClusTrAsT will use the base assembly for this purpose in this case.
 
 
 To use an assembly of your own as base assembly:
 ```
-$ clustrast -1 sr_left.fq.gz -2 sr_right.fq.gz -p 15 -o output_dir -b earlier_assembly.fa
+$ clustrast -1 ~/sr_left.fq.gz -2 ~/sr_right.fq.gz -p 15 -o ~/output_dir -b ~/earlier_assembly.fa
 ```
 ClusTrAsT will _not_ make a base-assembly with Trans-ABySS in this case, but it will use the `earlier_assembly.fa` as guiding contigs.
 
