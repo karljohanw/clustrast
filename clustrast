@@ -157,7 +157,7 @@ if [ -z ${CLUSTER_FILE+x} ]; then
 	GUIDING_CONTIGS=${BASE_ASSEMBLY}
     fi
     # force fastq format
-    awk 'BEGIN{c=0}(/^[@>]/ && c!=0){printf "\n+\n%s\n";for(i=0;i<c;++i){printf "H"};printf "\n";c=0}(/^@/){print $1;getline;print $0;getline;print "+";getline;print;next}(/^>/){sub(/^>/,"@"); print $1;c=0;next}{c+=length($0);printf "%s",$0}END{if (c>0){printf "\n+\n";for(i=0;i<c;++i){printf "H"};printf "\n"}}' ${GUIDING_CONTIGS} > ${TMP_DIR}/gc.fq
+    awk 'BEGIN{c=0}(/^[@>]/ && c!=0){printf "\n+\n";for(i=0;i<c;++i){printf "H"};printf "\n";c=0}(/^@/){print $1;getline;print $0;getline;print "+";getline;print;next}(/^>/){sub(/^>/,"@"); print $1;c=0;next}{c+=length($0);printf "%s",$0}END{if (c>0){printf "\n+\n";for(i=0;i<c;++i){printf "H"};printf "\n"}}' ${GUIDING_CONTIGS} > ${TMP_DIR}/gc.fq
     # RUN isONclust!
     isONclust --isoseq --t ${CPU} --fastq ${TMP_DIR}/gc.fq --outfolder ${TMP_DIR}/tmp
     mv ${TMP_DIR}/tmp/final_clusters.tsv ${TMP_DIR}/final_clusters.tsv
