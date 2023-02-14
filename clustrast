@@ -294,7 +294,7 @@ else
     touch ${CLUSTER_DIR}/running.txt
     open_sem $(( ${CPU} - 1 ))
     run_with_lock_no_exit smart_merge
-    for i in "${CLUSTERS}"; do
+    for i in ${CLUSTERS}; do
 	f=${CLUSTER_DIR}/${i}
 	test -s ${f}/transcripts.fa && continue
 	run_with_lock_no_exit shannon_cl ${f}
