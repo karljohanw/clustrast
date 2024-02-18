@@ -78,4 +78,4 @@ ClusTrAsT will _not_ make a base-assembly with Trans-ABySS in this case, but it 
 
 ## Citation
 
-Karl Johan Westrin, Warren W. Kretzschmar & Olof Emanuelsson: Short read *de novo* transcript isoform assembly guided by clustered contigs, 2021.
+Karl Johan Westrin, Warren W. Kretzschmar & Olof Emanuelsson: ClusTrast: a short read de novo transcript isoform assembler guided by clustered contigs. *BMC Bioinformatics*, 25(1):54, Feb 2024.
